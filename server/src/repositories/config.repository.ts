@@ -107,6 +107,11 @@ export interface EnvData {
     mediaLocation?: string;
   };
 
+  oauthProfileMap?: {
+    email?: Record<string, string>;
+    sub?: Record<string, string>;
+  };
+
   workers: ImmichWorker[];
 
   plugins: {
@@ -140,6 +145,44 @@ const TELEMETRY_TYPES = new Set(Object.values(ImmichTelemetry));
 const asSet = <T>(value: string | undefined, defaults: T[]) => {
   const values = (value || '').replaceAll(/\s/g, '').split(',').filter(Boolean);
   return new Set(values.length === 0 ? defaults : (values as T[]));
+};
+
+const parseOauthProfileMap = (value?: string): EnvData['oauthProfileMap'] => {
+  if (!value) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    throw new Error(`IMMICH_OAUTH_PROFILE_MAP must be valid JSON: ${error}`);
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('IMMICH_OAUTH_PROFILE_MAP must be a JSON object');
+  }
+
+  const isStringRecord = (record: unknown, key: string): record is Record<string, string> => {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) {
+      throw new Error(`IMMICH_OAUTH_PROFILE_MAP.${key} must be a JSON object`);
+    }
+
+    for (const [entryKey, entryValue] of Object.entries(record)) {
+      if (typeof entryValue !== 'string') {
+        throw new Error(`IMMICH_OAUTH_PROFILE_MAP.${key}.${entryKey} must be a string`);
+      }
+    }
+
+    return true;
+  };
+
+  const { email, sub } = parsed as { email?: unknown; sub?: unknown };
+
+  return {
+    email: email ? (isStringRecord(email, 'email') ? email : undefined) : undefined,
+    sub: sub ? (isStringRecord(sub, 'sub') ? sub : undefined) : undefined,
+  };
 };
 
 const getEnv = (): EnvData => {
@@ -330,6 +373,8 @@ const getEnv = (): EnvData => {
       ignoreMountCheckErrors: !!dto.IMMICH_IGNORE_MOUNT_CHECK_ERRORS,
       mediaLocation: dto.IMMICH_MEDIA_LOCATION,
     },
+
+    oauthProfileMap: parseOauthProfileMap(dto.IMMICH_OAUTH_PROFILE_MAP),
 
     telemetry: {
       apiPort: dto.IMMICH_API_METRICS_PORT || 8081,
