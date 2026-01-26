@@ -276,16 +276,20 @@ export class AuthService extends BaseService {
     const profile = await this.oauthRepository.getProfile(oauth, url, expectedState, codeVerifier);
     const { autoRegister, defaultStorageQuota, storageLabelClaim, storageQuotaClaim, roleClaim } = oauth;
     this.logger.debug(`Logging in with OAuth: ${JSON.stringify(profile)}`);
-    let user: UserAdmin | undefined = await this.userRepository.getByOAuthId(profile.sub);
+    const overrideEmail = this.getOidcOverrideEmail(profile);
+    const lookupEmail = overrideEmail ?? profile.email;
+    let user: UserAdmin | undefined = overrideEmail
+      ? await this.userRepository.getByEmail(overrideEmail)
+      : await this.userRepository.getByOAuthId(profile.sub);
 
     // link by email
-    if (!user && profile.email) {
-      const emailUser = await this.userRepository.getByEmail(profile.email);
+    if (!user && lookupEmail) {
+      const emailUser = await this.userRepository.getByEmail(lookupEmail);
       if (emailUser) {
-        if (emailUser.oauthId) {
+        if (!overrideEmail && emailUser.oauthId) {
           throw new BadRequestException('User already exists, but is linked to another account.');
         }
-        user = await this.userRepository.update(emailUser.id, { oauthId: profile.sub });
+        user = overrideEmail ? emailUser : await this.userRepository.update(emailUser.id, { oauthId: profile.sub });
       }
     }
 
@@ -559,6 +563,26 @@ export class AuthService extends BaseService {
   private getClaim<T>(profile: OAuthProfile, options: ClaimOptions<T>): T {
     const value = profile[options.key as keyof OAuthProfile];
     return options.isValid(value) ? (value as T) : options.default;
+  }
+
+  private getOidcOverrideEmail(profile: OAuthProfile): string | undefined {
+    const immichUsername = this.getClaim<string | undefined>(profile, {
+      key: 'immich_username',
+      default: undefined,
+      isValid: (value: unknown) => isString(value) && value.length > 0,
+    });
+
+    if (!immichUsername) {
+      return undefined;
+    }
+
+    const overrideMap: Record<string, string> = {
+      // Replace these with your claim values and target shared user emails.
+      'catalog1@company.com': 'catalog1@company.com',
+      'catalog2@company.com': 'catalog2@company.com',
+    };
+
+    return overrideMap[immichUsername];
   }
 
   private resolveRedirectUri(
