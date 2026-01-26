@@ -108,7 +108,7 @@ export interface EnvData {
   };
 
   oauthProfileMap?: {
-    email?: Record<string, string>;
+    email?: Record<string, { email: string; sub?: string }>;
     sub?: Record<string, string>;
   };
 
@@ -177,10 +177,41 @@ const parseOauthProfileMap = (value?: string): EnvData['oauthProfileMap'] => {
     return true;
   };
 
+  const normalizeEmailMap = (record: unknown): Record<string, { email: string; sub?: string }> => {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) {
+      throw new Error('IMMICH_OAUTH_PROFILE_MAP.email must be a JSON object');
+    }
+
+    const normalized: Record<string, { email: string; sub?: string }> = {};
+    for (const [entryKey, entryValue] of Object.entries(record)) {
+      if (typeof entryValue === 'string') {
+        normalized[entryKey] = { email: entryValue };
+        continue;
+      }
+
+      if (!entryValue || typeof entryValue !== 'object' || Array.isArray(entryValue)) {
+        throw new Error(`IMMICH_OAUTH_PROFILE_MAP.email.${entryKey} must be a string or object`);
+      }
+
+      const { email, sub } = entryValue as { email?: unknown; sub?: unknown };
+      if (typeof email !== 'string') {
+        throw new Error(`IMMICH_OAUTH_PROFILE_MAP.email.${entryKey}.email must be a string`);
+      }
+
+      if (sub !== undefined && typeof sub !== 'string') {
+        throw new Error(`IMMICH_OAUTH_PROFILE_MAP.email.${entryKey}.sub must be a string`);
+      }
+
+      normalized[entryKey] = sub ? { email, sub } : { email };
+    }
+
+    return normalized;
+  };
+
   const { email, sub } = parsed as { email?: unknown; sub?: unknown };
 
   return {
-    email: email ? (isStringRecord(email, 'email') ? email : undefined) : undefined,
+    email: email ? normalizeEmailMap(email) : undefined,
     sub: sub ? (isStringRecord(sub, 'sub') ? sub : undefined) : undefined,
   };
 };

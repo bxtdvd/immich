@@ -81,9 +81,13 @@ export class OAuthRepository {
 
       const { oauthProfileMap } = this.configRepository.getEnv();
       if (profile.email && oauthProfileMap?.email?.[profile.email]) {
-        const mappedEmail = oauthProfileMap.email[profile.email];
-        this.logger.debug(`OAuth profile email mapped: ${profile.email} -> ${mappedEmail}`);
-        profile.email = mappedEmail;
+        const mappedEntry = oauthProfileMap.email[profile.email];
+        this.logger.debug(`OAuth profile email mapped: ${profile.email} -> ${mappedEntry.email}`);
+        profile.email = mappedEntry.email;
+        if (mappedEntry.sub) {
+          this.logger.debug(`OAuth profile sub mapped: ${profile.sub} -> ${mappedEntry.sub}`);
+          profile.sub = mappedEntry.sub;
+        }
       }
 
       if (oauthProfileMap?.sub?.[profile.sub]) {
