@@ -61,6 +61,10 @@ export class EnvDto {
   @Type(() => Number)
   IMMICH_MICROSERVICES_METRICS_PORT?: number;
 
+  @IsString()
+  @Optional()
+  IMMICH_OAUTH_PROFILE_MAP?: string;
+
   @ValidateBoolean({ optional: true })
   IMMICH_ALLOW_EXTERNAL_PLUGINS?: boolean;
 

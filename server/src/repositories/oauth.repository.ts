@@ -1,6 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import type { UserInfoResponse } from 'openid-client' with { 'resolution-mode': 'import' };
 import { OAuthTokenEndpointAuthMethod } from 'src/enum';
+import { ConfigRepository } from 'src/repositories/config.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 
 export type OAuthConfig = {
@@ -19,7 +20,10 @@ export type OAuthProfile = UserInfoResponse;
 
 @Injectable()
 export class OAuthRepository {
-  constructor(private logger: LoggingRepository) {
+  constructor(
+    private logger: LoggingRepository,
+    private configRepository: ConfigRepository,
+  ) {
     this.logger.setContext(OAuthRepository.name);
   }
 
@@ -73,6 +77,23 @@ export class OAuthRepository {
       const profile = await fetchUserInfo(client, tokens.access_token, oidc.skipSubjectCheck);
       if (!profile.sub) {
         throw new Error('Unexpected profile response, no `sub`');
+      }
+
+      const { oauthProfileMap } = this.configRepository.getEnv();
+      if (profile.email && oauthProfileMap?.email?.[profile.email]) {
+        const mappedEntry = oauthProfileMap.email[profile.email];
+        this.logger.debug(`OAuth profile email mapped: ${profile.email} -> ${mappedEntry.email}`);
+        profile.email = mappedEntry.email;
+        if (mappedEntry.sub) {
+          this.logger.debug(`OAuth profile sub mapped: ${profile.sub} -> ${mappedEntry.sub}`);
+          profile.sub = mappedEntry.sub;
+        }
+      }
+
+      if (oauthProfileMap?.sub?.[profile.sub]) {
+        const mappedSub = oauthProfileMap.sub[profile.sub];
+        this.logger.debug(`OAuth profile sub mapped: ${profile.sub} -> ${mappedSub}`);
+        profile.sub = mappedSub;
       }
 
       return profile;
