@@ -668,6 +668,31 @@ describe(AuthService.name, () => {
       expect(mocks.user.create).not.toHaveBeenCalled();
     });
 
+    it('should allow a mapped immich_username to log into a shared user without linking oauthId', async () => {
+      const sharedUser = factory.userAdmin({ email: 'catalog1@company.com', oauthId: 'existing-sub' });
+
+      mocks.systemMetadata.get.mockResolvedValue(systemConfigStub.oauthEnabled);
+      mocks.oauth.getProfile.mockResolvedValue({
+        sub: 'another-sub',
+        email: 'person@company.com',
+        immich_username: 'catalog1@company.com',
+      });
+      mocks.user.getByEmail.mockResolvedValue(sharedUser);
+      mocks.session.create.mockResolvedValue(factory.session());
+
+      await expect(
+        sut.callback(
+          { url: 'http://immich/auth/login?code=abc123', state: 'xyz789', codeVerifier: 'foobar' },
+          {},
+          loginDetails,
+        ),
+      ).resolves.toEqual(oauthResponse(sharedUser));
+
+      expect(mocks.user.getByOAuthId).not.toHaveBeenCalled();
+      expect(mocks.user.update).not.toHaveBeenCalled();
+      expect(mocks.user.getByEmail).toHaveBeenCalledWith('catalog1@company.com');
+    });
+
     it('should allow auto registering by default', async () => {
       const user = factory.userAdmin({ oauthId: 'oauth-id' });
 
